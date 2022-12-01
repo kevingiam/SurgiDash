@@ -1,7 +1,3 @@
-# Bootstrap
-# Check correctness of all data
-# Check missing values
-
 # Import dependencies and start the app ---------------------------------------
 import numpy as np
 import pandas as pd
@@ -9,7 +5,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import json
 import dash_bootstrap_components as dbc
-from dash import Dash, dcc, html, Input, Output, State, dash_table
+import dash
+from dash import Dash, dcc, html, Input, Output, State, callback, dash_table
 app = Dash(
     __name__,
     meta_tags=[{'name': 'viewport', 'content': 'width=device-width, initial-scale=1.0'}]
@@ -18,7 +15,6 @@ app = Dash(
 # Read the data and get variables ---------------------------------------------------------
 df_raw = pd.read_csv('/Users/kevingiam/Aspera/Home/pcore_clean_2022_11_03.csv')
 uq_h_name = np.sort(df_raw['h_name'].unique())
-#uq_p_surgery_type = np.sort(df_raw['p_surgery_type'].unique())
 uq_p_achi_id = np.sort(df_raw['p_achi_id'].unique())
 uq_p_asa_ps = df_raw['p_asa_ps'].unique()
 uq_p_admission_urgency = df_raw['p_admission_urgency'].unique()
@@ -55,7 +51,11 @@ sidebar = html.Div(
         ),
 
         # Checklist for hospital name
-        dbc.Row([dcc.Checklist()]),
+        dbc.Row([dcc.Checklist(
+            id='id_ck_h_name',
+            options=uq_h_name,
+            value=uq_h_name
+        )]),
 
         # Data table for ACHI ID
         dbc.Row(
@@ -98,6 +98,9 @@ sidebar = html.Div(
         dbc.Row([
             dbc.Button(id='id_button_save_changes', children='Save changes', n_clicks=0, size='sm')
         ]),
+
+        # Store the data frame inside the user's current browser session
+        dcc.Store(id='id_df_stored', data=df_raw.copy(deep=True).to_dict('records'), storage_type='memory'),
     ]
 )
 
@@ -121,7 +124,7 @@ app.layout = dbc.Container(
 )
 
 # Callback: Modal ---------------------------------------------------------
-@app.callback(
+@callback(
     [Output('id_modal_docs', 'is_open')],
     [Input('id_button_docs_open', 'n_clicks'), Input('id_button_docs_close', 'n_clicks')],
     [State('id_modal_docs', 'is_open')]
@@ -132,46 +135,78 @@ def toggle_modal_docs(n_open, n_close, is_open):
         return [not is_open]
     return [is_open]
 
-# Callback: Hospital length of stay ---------------------------------------------------------
-
-# Callback: Hospital length of stay ---------------------------------------------------------
-@app.callback(
+# Callback: ACHI ID data table select all and select none ---------------------------------------------------------
+@callback(
     [
-        Output('id_graph_h_los', 'figure')
+        Output('id_dt_p_achi_id', 'selected_rows')
     ],
     [
+        Input('id_button_selectall_p_achi_id', 'n_clicks'),
+        Input('id_button_selectnone_p_achi_id', 'n_clicks')
+    ],
+    [
+        State('id_dt_p_achi_id', 'derived_virtual_data')
+    ]
+)
+
+def selectall_p_achi_id(all_clicks, none_clicks, selected_rows):
+    if selected_rows is None:
+        return [[]]
+
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        button_id = 'No clicks yet'
+    else:
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if button_id == 'id_button_selectall_p_achi_id':
+        return [[i for i in range(len(selected_rows))]]
+    else:
+        return [[]]
+
+# Callback: Apply filter ---------------------------------------------------------
+@callback(
+    Output('id_df_stored', 'data'),
+    [
+        Input('id_df_stored', 'data')
         Input('id_ck_h_name', 'value'),
-        # Input('id_dd_p_surgery_type', 'value'),
-        Input('id_dd_p_achi_id', 'value'),
         Input('id_rs_p_asa_ps', 'value'),
         Input('id_ck_p_admission_urgency', 'value')
     ]
 )
 
-def update_h_los(input_ck_h_name, input_dd_p_achi_id, input_rs_p_asa_ps, input_ck_p_admission_urgency):  # Component property of input
-    # Copy
-    df_h_los = df_raw.copy()
-    # Filter
-    df_h_los = df_h_los[df_h_los['h_name'].isin(input_ck_h_name)]
-    # df_h_los = df_h_los[df_h_los['p_surgery_type'].isin(input_dd_p_surgery_type)]
-    df_h_los = df_h_los[df_h_los['p_achi_id'].isin(input_dd_p_achi_id)]
-    df_h_los = df_h_los[df_h_los['p_asa_ps'].isin(input_rs_p_asa_ps)]
-    df_h_los = df_h_los[df_h_los['p_admission_urgency'].isin(input_ck_p_admission_urgency)]
+def store_data(data, input_ck_h_name, input_rs_p_asa_ps, input_ck_p_admission_urgency):
+    data = data[
+        (data['h_name'].isin(input_ck_h_name)) &
+        (data['p_asa_ps'].isin(input_rs_p_asa_ps)) &
+        (data['p_admission_urgency'].isin(input_ck_p_admission_urgency))
+    ]
+
+    return [data]
+
+
+# Callback: Graph, hospital length of stay ---------------------------------------------------------
+@callback(
+    Output('id_graph_h_los', 'figure'), 
+    Input('id_df_stored', 'data')
+)
+
+def update_h_los(data):
     # Slice
-    df_h_los = df_h_los[['h_name', 'p_admission_urgency', 'p_los']]
+    data = data[['h_name', 'p_admission_urgency', 'p_los']]
     # Group
-    df_h_los = df_h_los.groupby(['h_name', 'p_admission_urgency']).sum()
-    df_h_los = df_h_los.reset_index()
+    data = data.groupby(['h_name', 'p_admission_urgency']).sum()
+    data = data.reset_index()
     # Figure
     fig = px.bar(
-        df_h_los,
+        data,
         x='h_name',
         y='p_los',
         color='p_admission_urgency',
         hover_data={}
     )
 
-    return [fig] # Component property of output
+    return [fig]
 
 # Run the app ---------------------------------------------------------
 if __name__ == '__main__':
