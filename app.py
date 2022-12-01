@@ -55,7 +55,7 @@ sidebar = html.Div(
         ),
 
         # Checklist for hospital name
-        dbc.Row([dcc.Checklist(
+        dbc.Row([dcc.Checklist()]),
 
         # Data table for ACHI ID
         dbc.Row(
