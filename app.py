@@ -15,7 +15,7 @@ app = Dash(
 # Read the data and get variables ---------------------------------------------------------
 df_raw = pd.read_csv('/Users/kevingiam/Aspera/Home/pcore_clean_2022_11_03.csv')
 uq_h_name = np.sort(df_raw['h_name'].unique())
-uq_p_achi_id = np.sort(df_raw['p_achi_id'].unique())
+uq_p_achi_id = df_raw[['p_achi_id']].sort_values('p_achi_id').drop_duplicates()
 uq_p_asa_ps = df_raw['p_asa_ps'].unique()
 uq_p_admission_urgency = df_raw['p_admission_urgency'].unique()
 
@@ -69,7 +69,8 @@ sidebar = html.Div(
             dash_table.DataTable(
                 id='id_dt_p_achi_id',
                 columns=[{'id': 'p_achi_id', 'name': 'p_achi_id', 'type': 'numeric'}],
-                data=df_raw[['p_achi_id']].sort_values('p_achi_id').drop_duplicates().to_dict('records'),
+                data=uq_p_achi_id.to_dict('records'),
+                selected_rows=np.arange(uq_p_achi_id.shape[0]),
                 row_selectable='multi',
                 sort_action='native',
                 filter_action='native',
@@ -99,6 +100,16 @@ sidebar = html.Div(
             dbc.Button(id='id_button_save_changes', children='Save changes', n_clicks=0, size='sm')
         ]),
 
+        # Error modal
+        dbc.Modal(
+                    [
+                        dbc.ModalHeader(dbc.ModalTitle('Error')),
+                        dbc.ModalBody('Error'),
+                    ],
+                    id='id_modal_error',
+                    is_open=False,
+                ),
+
         # Store the data frame inside the user's current browser session
         dcc.Store(id='id_df_stored', data=df_raw.copy(deep=True).to_dict('records'), storage_type='memory'),
     ]
@@ -123,7 +134,7 @@ app.layout = dbc.Container(
     ], fluid=True
 )
 
-# Callback: Modal ---------------------------------------------------------
+# Callback: Documentation modal ---------------------------------------------------------
 @callback(
     [Output('id_modal_docs', 'is_open')],
     [Input('id_button_docs_open', 'n_clicks'), Input('id_button_docs_close', 'n_clicks')],
@@ -166,24 +177,51 @@ def selectall_p_achi_id(all_clicks, none_clicks, selected_rows):
 
 # Callback: Apply filter ---------------------------------------------------------
 @callback(
-    Output('id_df_stored', 'data'),
     [
-        Input('id_df_stored', 'data')
-        Input('id_ck_h_name', 'value'),
-        Input('id_rs_p_asa_ps', 'value'),
-        Input('id_ck_p_admission_urgency', 'value')
+        Output('id_df_stored', 'data'),
+        Output('id_modal_error', 'is_open')
+    ],
+    [
+        Input('id_button_save_changes', 'n_clicks')
+    ],
+    [
+        State('id_ck_h_name', 'value'),
+        State('id_dt_p_achi_id', 'data'),
+        State('id_dt_p_achi_id', 'selected_rows'),
+        State('id_rs_p_asa_ps', 'value'),
+        State('id_ck_p_admission_urgency', 'value')
     ]
 )
 
-def store_data(data, input_ck_h_name, input_rs_p_asa_ps, input_ck_p_admission_urgency):
-    data = data[
-        (data['h_name'].isin(input_ck_h_name)) &
-        (data['p_asa_ps'].isin(input_rs_p_asa_ps)) &
-        (data['p_admission_urgency'].isin(input_ck_p_admission_urgency))
-    ]
+def store_data(n_clicks, input_ck_h_name, input_dt_p_achi_id_data, input_dt_p_achi_id_selectedrows, input_rs_p_asa_ps, input_ck_p_admission_urgency):
+    # Get the raw data frame
+    data = df_raw.copy(deep=True)
 
-    return [data]
+    # Flag for modal
+    is_open = True
 
+    # Check if any filter is empty
+    filter_input = [input_ck_h_name, input_dt_p_achi_id_selectedrows, input_rs_p_asa_ps, input_ck_p_admission_urgency]
+    filter_not_empty = all(map(lambda val: bool(val), filter_input))
+    print(input_dt_p_achi_id_selectedrows)
+    # If filter is not empty
+    if filter_not_empty:
+        # Get selected p_achi_id
+        dt_p_achi_id_values = [input_dt_p_achi_id_data[i]['p_achi_id'] for i in input_dt_p_achi_id_selectedrows]
+        # Apply filter
+        data = data[
+            # Hospital name filter
+            (data['h_name'].isin(input_ck_h_name)) &
+            # ACHI ID filter
+            (data['p_achi_id'].isin(dt_p_achi_id_values)) &
+            # ASA PS filter
+            (data['p_asa_ps'].isin(input_rs_p_asa_ps)) &
+            # Admission urgency filter
+            (data['p_admission_urgency'].isin(input_ck_p_admission_urgency))
+        ]
+        is_open = False
+    
+    return data.to_dict('records'), is_open
 
 # Callback: Graph, hospital length of stay ---------------------------------------------------------
 @callback(
@@ -192,6 +230,7 @@ def store_data(data, input_ck_h_name, input_rs_p_asa_ps, input_ck_p_admission_ur
 )
 
 def update_h_los(data):
+    data = pd.DataFrame(data)
     # Slice
     data = data[['h_name', 'p_admission_urgency', 'p_los']]
     # Group
@@ -205,8 +244,7 @@ def update_h_los(data):
         color='p_admission_urgency',
         hover_data={}
     )
-
-    return [fig]
+    return fig
 
 # Run the app ---------------------------------------------------------
 if __name__ == '__main__':
