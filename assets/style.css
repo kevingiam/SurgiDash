@@ -3870,6 +3870,11 @@ textarea.form-control {
   text-decoration: none;
   background-color: #fff;
   border: 1px solid #dee2e6;
+  display: flex;
+  height: 1.5rem;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
   transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out; }
   @media (prefers-reduced-motion: reduce) {
     .page-link {
@@ -10983,13 +10988,14 @@ Fixing Order => Base + Typography >> General Layout + Grid >> Page Layout + Comp
   position: absolute; }
 
 .sidebar-right {
-  right: -15.625rem;
+  overflow-y: scroll;
+  right: 1rem;
   position: fixed;
   top: 0;
-  width: 15.625rem;
+  width: 21.5rem;
   background-color: #fff;
-  height: calc(100% - 7.0625rem);
-  margin-top: 5rem;
+  height: calc(100% - 2rem);
+  margin-top: 1rem;
   transition: all .5s ease-in-out;
   padding-bottom: 1.875rem;
   box-shadow: -2px 3px 10px 0px rgba(119, 119, 119, 0.1); }
@@ -24307,7 +24313,6 @@ button {
 
 .btn {
   padding: 0.938rem 1.5rem;
-  border-radius: 0.75rem;
   font-weight: 400;
   font-size: 1rem; }
   .btn:hover, .btn:focus, .btn:active, .btn.active {
