@@ -87,7 +87,7 @@ sidebar = html.Div(
         
         # Documentation
         html.Div(
-            [html.P(children='Welcome to surgical dashboard. Click on the documentation for more details.', className='mb-1'),],
+            [html.P(children='Welcome to surgical dashboard. Click on the documentation for more details.', className='text-center mb-1'),],
             className='mx-3'
         ),
         html.Div(
@@ -177,7 +177,7 @@ sidebar = html.Div(
         dbc.Modal(
                     [
                         dbc.ModalHeader(dbc.ModalTitle('Error')),
-                        dbc.ModalBody('Error'),
+                        dbc.ModalBody('No data after applying filter.'),
                     ],
                     id='id_modal_error',
                     is_open=False,
@@ -286,43 +286,32 @@ def store_data(
     input_dp_p_admission_date_start, 
     input_dp_p_admission_date_end
 ):
+
+    # Get selected p_achi_id
+    dt_p_achi_id_values = [input_dt_p_achi_id_data[i]['p_achi_id'] for i in input_dt_p_achi_id_selectedrows]
+
     # Get the raw data frame
     data = df_raw.copy(deep=True)
 
-    # Flag for modal
-    is_open = True
+    # Apply filter
+    data = data[
+        # Hospital name
+        (data['h_name'].isin(input_ck_h_name)) &
+        # ACHI ID
+        (data['p_achi_id'].isin(dt_p_achi_id_values)) &
+        # ASA PS
+        (data['p_asa_ps'].isin(input_rs_p_asa_ps)) &
+        # Admission urgency
+        (data['p_admission_urgency'].isin(input_ck_p_admission_urgency)) &
+        # Admission date
+        (data['p_admission_date'] > input_dp_p_admission_date_start) & 
+        (data['p_admission_date'] < input_dp_p_admission_date_end)
+    ]
 
-    # Check if any filter is empty
-    filter_input = [input_ck_h_name, input_dt_p_achi_id_selectedrows, input_rs_p_asa_ps, input_ck_p_admission_urgency]
-    filter_not_empty = all(map(lambda val: bool(val), filter_input))
-
-    # Check if any dates is invalid
-    input_dp_p_admission_date_start = datetime.strptime(input_dp_p_admission_date_start, '%Y-%m-%d')
-    input_dp_p_admission_date_end = datetime.strptime(input_dp_p_admission_date_end, '%Y-%m-%d')
-    p_admission_date_is_valid = valid_date(input_dp_p_admission_date_start, input_dp_p_admission_date_end)
-
-    # If filter is not empty
-    if filter_not_empty and p_admission_date_is_valid:
-        # Get selected p_achi_id
-        dt_p_achi_id_values = [input_dt_p_achi_id_data[i]['p_achi_id'] for i in input_dt_p_achi_id_selectedrows]
-        # Apply filter
-        data = data[
-            # Hospital name
-            (data['h_name'].isin(input_ck_h_name)) &
-            # ACHI ID
-            (data['p_achi_id'].isin(dt_p_achi_id_values)) &
-            # ASA PS
-            (data['p_asa_ps'].isin(input_rs_p_asa_ps)) &
-            # Admission urgency
-            (data['p_admission_urgency'].isin(input_ck_p_admission_urgency)) &
-            # Admission date
-            (data['p_admission_date'] > input_dp_p_admission_date_start) & 
-            (data['p_admission_date'] < input_dp_p_admission_date_end)
-        ]
-        print(data.shape)
-        is_open = False
-    
-    return data.to_dict('records'), is_open
+    # Raise modal if data frame becomes empty
+    if data.shape[0] == 0:
+        return data.to_dict('records'), True
+    return data.to_dict('records'), False
 
 # Callback: Graph, hospital length of stay ---------------------------------------------------------
 @callback(
